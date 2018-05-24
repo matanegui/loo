@@ -1,8 +1,4 @@
 #include "game.h";
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
-#include <stdbool.h>
-#include <stdio.h>
 
 #define FPS 60
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -11,20 +7,26 @@
 // Screen dimension constants
 static const int SCREEN_FPS = FPS;
 static const int SCREEN_TICKS_PER_FRAME = 1000 / FPS;
-static const RGBAColor SCREEN_BACKGROUND_COLOR = (RGBAColor){0, 0, 0, 255};
-static const int SCREEN_WIDTH = 640;
-static const int SCREEN_HEIGHT = 360;
+static const SDL_Color SCREEN_BACKGROUND_COLOR = (SDL_Color){19, 18, 27};
+static const int SCREEN_WIDTH = 320;
+static const int SCREEN_HEIGHT = 160;
+// static const Uint32 WINDOW_FLAGS = 0;
 static const Uint32 WINDOW_FLAGS = SDL_WINDOW_FULLSCREEN_DESKTOP;
 
 // SDL globals
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static SDL_Event e;
-static InputState input_state = (InputState){false, false, false, false};
+
+// Others
+static TTF_Font* font = NULL;
+static const char* FONT_PATH = "assets/fonts/fallout.ttf";
+static const int FONT_SIZE = 12;
+bool is_key_down = false;
 
 /// Loop functions ///
 
-bool GAME_init(bool (*init_callback)()) {
+bool GAME_Init(bool (*init_callback)()) {
   bool success = true;
   // Initialize SDL
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -52,9 +54,9 @@ bool GAME_init(bool (*init_callback)()) {
         SDL_RenderSetLogicalSize(renderer, SCREEN_WIDTH, SCREEN_HEIGHT);
 
         // Initialize renderer color
-        SDL_SetRenderDrawColor(
-            renderer, SCREEN_BACKGROUND_COLOR.r, SCREEN_BACKGROUND_COLOR.g,
-            SCREEN_BACKGROUND_COLOR.b, SCREEN_BACKGROUND_COLOR.a);
+        SDL_SetRenderDrawColor(renderer, SCREEN_BACKGROUND_COLOR.r,
+                               SCREEN_BACKGROUND_COLOR.g,
+                               SCREEN_BACKGROUND_COLOR.b, 255);
 
         // Initialize PNG loading
         int imgFlags = IMG_INIT_PNG;
@@ -63,6 +65,20 @@ bool GAME_init(bool (*init_callback)()) {
                  IMG_GetError());
           success = false;
         }
+
+        // Initialize SDL_ttf
+        if (TTF_Init() == -1) {
+          printf("SDL_ttf could not initialize! SDL_ttf Error: %s\n",
+                 TTF_GetError());
+          success = false;
+        } else {
+          font = TTF_OpenFont(FONT_PATH, FONT_SIZE);
+          if (font == NULL) {
+            printf("Failed to load lazy font! SDL_ttf Error: %s\n",
+                   TTF_GetError());
+            success = false;
+          }
+        }
       }
     }
   }
@@ -70,14 +86,14 @@ bool GAME_init(bool (*init_callback)()) {
   return success;
 }
 
-bool GAME_load(bool (*load_callback)()) { load_callback(); }
+bool GAME_Load(bool (*load_callback)()) { load_callback(); }
 
-void GAME_loop(void (*update_callback)(InputState input, int delta),
+void GAME_Loop(void (*update_callback)(InputState* input, int delta),
                void (*draw_callback)(SDL_Renderer* renderer)) {
   bool quit_flag = false;
   Uint32 frame_start;
   Uint32 frame_time;
-  int delta;
+  int delta = 0;
   while (!quit_flag) {
     frame_start = SDL_GetTicks();
 
@@ -85,38 +101,54 @@ void GAME_loop(void (*update_callback)(InputState input, int delta),
     while (SDL_PollEvent(&e) != 0) {
       if (e.type == SDL_QUIT) {
         quit_flag = true;
+      } else if (e.type == SDL_KEYUP) {
+        is_key_down = false;
       }
     }
+    InputState input_state = (InputState){false, false, false, false};
     const Uint8* currentKeyStates = SDL_GetKeyboardState(NULL);
-    input_state = (InputState){false, false, false, false};
-    if (currentKeyStates[SDL_SCANCODE_UP]) {
-      input_state.up = true;
-    }
-    if (currentKeyStates[SDL_SCANCODE_DOWN]) {
-      input_state.down = true;
-    }
-    if (currentKeyStates[SDL_SCANCODE_LEFT]) {
-      input_state.left = true;
-    }
-    if (currentKeyStates[SDL_SCANCODE_RIGHT]) {
-      input_state.right = true;
+    if (currentKeyStates[SDL_SCANCODE_ESCAPE]) {
+      quit_flag = true;
+    } else if (!is_key_down) {
+      // Reset input state
+      input_state.up = false;
+      input_state.down = false;
+      input_state.left = false;
+      input_state.right = false;
+      // Map keyboard press state to input state
+      if (currentKeyStates[SDL_SCANCODE_UP]) {
+        input_state.up = true;
+        is_key_down = true;
+      }
+      if (currentKeyStates[SDL_SCANCODE_DOWN]) {
+        input_state.down = true;
+        is_key_down = true;
+      }
+      if (currentKeyStates[SDL_SCANCODE_LEFT]) {
+        input_state.left = true;
+        is_key_down = true;
+      }
+      if (currentKeyStates[SDL_SCANCODE_RIGHT]) {
+        input_state.right = true;
+        is_key_down = true;
+      }
     }
 
     // Update
-    update_callback(input_state, delta);
+    update_callback(&input_state, delta);
 
     // Draw
     SDL_RenderClear(renderer);
-    const RGBAColor fill_color = (RGBAColor){0, 20, 30, 255};
+    const SDL_Color fill_color = (SDL_Color){0, 20, 30};
     SDL_SetRenderDrawColor(renderer, fill_color.r, fill_color.g, fill_color.b,
-                           fill_color.a);
+                           255);
     const SDL_Rect fill_rect = (SDL_Rect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
     SDL_RenderFillRect(renderer, &fill_rect);
     draw_callback(renderer);
     SDL_RenderPresent(renderer);
     SDL_SetRenderDrawColor(renderer, SCREEN_BACKGROUND_COLOR.r,
                            SCREEN_BACKGROUND_COLOR.g, SCREEN_BACKGROUND_COLOR.b,
-                           SCREEN_BACKGROUND_COLOR.a);
+                           255);
     // Frame cap delay and delta calculation
     frame_time = SDL_GetTicks() - frame_start;
     if (frame_time < SCREEN_TICKS_PER_FRAME) {
@@ -126,34 +158,31 @@ void GAME_loop(void (*update_callback)(InputState input, int delta),
   }
 }
 
-void GAME_quit(void (*quit_callback)()) {
-  quit_callback();
+void GAME_Quit(void (*quit_callback)()) {
+  if (quit_callback != NULL) {
+    quit_callback();
+  }
   // Destroy window
   SDL_DestroyWindow(window);
   window = NULL;
+  TTF_CloseFont(font);
   // Quit SDL subsystems
+  TTF_Quit();
+  IMG_Quit();
   SDL_Quit();
   printf("Over and out.\n");
 }
 
 /// Utils ///
-SDL_Texture* GAME_load_texture(const char* path) {
-  // The final texture
-  SDL_Texture* newTexture = NULL;
-  // Load image at specified path
-  SDL_Surface* loadedSurface = IMG_Load(path);
-  if (loadedSurface == NULL) {
-    printf("Unable to load image %s! SDL_image Error: %s\n", path,
-           IMG_GetError());
-  } else {
-    // Create texture from surface pixels
-    newTexture = SDL_CreateTextureFromSurface(renderer, loadedSurface);
-    if (newTexture == NULL) {
-      printf("Unable to create texture from %s! SDL Error: %s\n", path,
-             SDL_GetError());
-    }
-    // Get rid of old loaded surface
-    SDL_FreeSurface(loadedSurface);
-  }
-  return newTexture;
+
+SDL_Texture* CreateTextureFromSurface(SDL_Surface* surface) {
+  SDL_Texture* new_texture = NULL;
+  new_texture = SDL_CreateTextureFromSurface(renderer, surface);
+  return new_texture;
+}
+
+SDL_Surface* CreateSurfaceFromPNG(const char* path) { return IMG_Load(path); }
+
+SDL_Surface* CreateSurfaceFromText(const char* text, SDL_Color text_color) {
+  return TTF_RenderText_Solid(font, text, text_color);
 }
