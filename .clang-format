@@ -1,4 +1,5 @@
 BreakBeforeBraces: Custom
 BraceWrapping:
+  AfterEnum: false
   AfterControlStatement: false
 PointerAlignment: Left

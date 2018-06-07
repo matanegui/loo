@@ -1,89 +1,109 @@
-#include "src/game.h"
-#include "src/sprite.h"
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <stdio.h>
 
-// Test
-typedef struct EntityStruct {
-  int x, y;
-  SDL_Texture* sprite_texture;
-  SDL_Rect* sprite_rect;
-} Entity;
+#include "src/entity.h"
+#include "src/game.h"
+#include "src/sprite.h"
+#include "src/texture.h"
+#include "src/tilemap.h"
 
-Entity* create_entity(int x, int y) {
-  Entity* e = (Entity*)malloc(sizeof(Entity));
-  e->x = x;
-  e->y = y;
-  e->sprite_texture = NULL;
-  e->sprite_rect = NULL;
-  return e;
-}
-
-void destroy_entity(Entity* entity) {
-  free(entity->sprite_rect);
-  entity->sprite_rect = NULL;
-  SDL_DestroyTexture(entity->sprite_texture);
-  entity->sprite_texture = NULL;
-  free(entity);
-  entity = NULL;
-}
 // Test entity
-Entity* thing;
+Entity* thing = NULL;
+Tilemap* map = NULL;
+Entity* text = NULL;
+Entity** entities = NULL;
 
 // Setup
 bool init() { return true; }
 
 bool load() {
-  thing = create_entity(0, 0);
-  thing->sprite_texture = GAME_load_texture("assets/boi-24.png");
-  thing->sprite_rect = (SDL_Rect*)malloc(sizeof(SDL_Rect));
-  thing->sprite_rect->x = 0;
-  thing->sprite_rect->y = 0;
-  thing->sprite_rect->w = 24;
-  thing->sprite_rect->h = 24;
+  // Test animated entity
+  thing = CreateEntity(6, 0);
+  thing->sprite = CreateSprite();
+  thing->sprite->texture = TextureFromFile("assets/coqguy.png");
+  thing->sprite->clip_rect = CreateClipRect(0, 0, 12, 24);
+  CreateSpriteAnimation(thing->sprite, 400);
+  int* frames = NULL;
+  vector_push_back(frames, 0);
+  vector_push_back(frames, 1);
+  AddAnimationState(thing->sprite, "idle_right", frames);
+  PlaySpriteAnimation(thing->sprite, "idle_right");
+
+  // Test map
+  // unsigned short* map_data = NULL;
+  // for (int i = 0; i < 25; i++) {
+  // vector_push_back(map_data, 9);
+  //}
+  map = CreateTilemap(0, 0, 5, 5, 24, 24, "assets/tileset.png");
+  LoadMapDataFromFile(map, "data/maps/test.txt");
+
+  // Test text
+  text = CreateEntity(4, 146);
+  text->sprite = CreateSprite();
+  text->sprite->texture =
+      TextureFromText("Test attribute: 40", (SDL_Color){255, 255, 255});
+
+  // Group all entities
+  vector_push_back(entities, thing);
+  vector_push_back(entities, text);
+
   return true;
 };
 
 // Main loop
-void update(InputState input, int delta) {
-  const float speed = 0.15f;
-  const int move_distance = speed * delta;
-  if (input.up) {
+void update(InputState* input, int delta) {
+  const float speed = 0.5f;
+  const int move_distance = 24;
+  if (input->up) {
     thing->y = thing->y - move_distance;
   }
-  if (input.down) {
+  if (input->down) {
     thing->y = thing->y + move_distance;
   }
-  if (input.left) {
+  if (input->left) {
     thing->x = thing->x - move_distance;
   }
-  if (input.right) {
+  if (input->right) {
     thing->x = thing->x + move_distance;
   }
+  // Update animation
+  UpdateSprite(thing->sprite, delta);
 }
 
 void draw(SDL_Renderer* renderer) {
-  // draw thing
-  SDL_Rect render_rect = (SDL_Rect){thing->x, thing->y, thing->sprite_rect->w,
-                                    thing->sprite_rect->h};
-  SDL_RenderCopy(renderer, thing->sprite_texture, thing->sprite_rect,
-                 &render_rect);
+  // draw stuff
+  DrawTilemap(renderer, map);
+  for (int i = 0; i < vector_size(entities); i++) {
+    DrawEntity(renderer, entities[i]);
+  }
 }
 
 // Close and clean up
-void quit() { destroy_entity(thing); }
+void quit() {
+  for (int i = 0; i < vector_size(entities); i++) {
+    DestroyEntity(entities[i]);
+    entities[i] = NULL;
+  }
+  DestroyTilemap(map);
+  // Clean up direct references
+  map = NULL;
+  thing = NULL;
+  // Clean up vector
+  vector_free(entities);
+  entities = NULL;
+}
 
 int main(int argc, char* argv[]) {
   const char* fail_message = "Something failed. Killing.\n";
-  if (!GAME_init(&init)) {
+  if (!GAME_Init(&init)) {
     printf(fail_message);
   } else {
     // Load stuff
-    GAME_load(&load);
-    GAME_loop(&update, &draw);
+    GAME_Load(&load);
+    GAME_Loop(&update, &draw);
   }
 
-  GAME_quit(&quit);
+  GAME_Quit(&quit);
   return 0;
 }
